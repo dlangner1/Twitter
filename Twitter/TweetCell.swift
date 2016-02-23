@@ -19,35 +19,41 @@ class TweetCell: UITableViewCell {
     
     @IBOutlet weak var retweetButton: UIButton!
     @IBOutlet weak var favoriteButton: UIButton!
+    @IBOutlet weak var replyButton: UIButton!
     
-    @IBOutlet weak var profileImageView: UIImageView!
+    @IBOutlet weak var profileImageView: UIButton!
     
-    var tweetID: Int!
-
-    override func awakeFromNib() {
-        super.awakeFromNib()
-        
-        profileImageView.layer.cornerRadius = 6
-        profileImageView.clipsToBounds = true
-    }
-    
+    var tweetID: String?
+    let profileTap = UITapGestureRecognizer()
     var tweet: Tweet! {
         didSet {
             userName.text = tweet.user?.name
             userHandle.text = "@\((tweet.user?.screenName)!)"
             tweetDescriptionLabel.text = tweet.text
-            timestampLabel.text = tweet.createdAtString
+            timestampLabel.text = tweet.timeSince
             retweetCount.text = "\(tweet.retweetCount)"
             favoriteCount.text = "\(tweet.favoriteCount)"
-            self.profileImageView.setImageWithURL(NSURL(string: (tweet.user?.profileImageURL!)!)!)
             
+            if let urlString = tweet.user?.profileImageURL {
+                let url = NSURL(string: urlString)
+                self.profileImageView.setBackgroundImageForState(UIControlState.Normal, withURL: url!)
+            }
             retweetButton.setImage(UIImage(named: "retweet-action_default"), forState: .Normal)
             favoriteButton.setImage(UIImage(named: "like-action-off"), forState: .Normal)
-
-
+            
+            tweetID = tweet.tweetId
         }
     }
+
+    override func awakeFromNib() {
+        super.awakeFromNib()
         
+        profileImageView.layer.cornerRadius = 5
+        profileImageView.clipsToBounds = true
+        
+    }
+    
+    
     @IBAction func onRetweetPressed(sender: AnyObject) {
         if tweet.retweeted == false {
             retweetCount.text = "\(tweet.retweetCount! + 1)"
@@ -74,10 +80,15 @@ class TweetCell: UITableViewCell {
 
     }
     
+    @IBAction func onReplyPressed(sender: AnyObject) {
+        NSNotificationCenter.defaultCenter().postNotificationName("replied", object: nil, userInfo: ["repliedToTweet": tweet])
+    }
+    
     override func setSelected(selected: Bool, animated: Bool) {
         super.setSelected(selected, animated: animated)
 
         // Configure the view for the selected state
     }
+
 
 }

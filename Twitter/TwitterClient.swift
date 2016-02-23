@@ -38,6 +38,22 @@ class TwitterClient: BDBOAuth1SessionManager {
         
     }
     
+    func userTimeline(screenname: String, completion: (tweet: [Tweet]?, error: NSError?)-> ()) {
+        GET("1.1/statuses/user_timeline.json?screen_name=\(screenname)", parameters: nil,
+            success: { (operation: NSURLSessionDataTask?, response: AnyObject?) -> Void in
+                var tweets = Tweet.tweetsWithArray(response as! [NSDictionary])
+                completion(tweet: tweets, error: nil)
+            },
+            
+            failure: { (operation: NSURLSessionDataTask?, error: NSError!) -> Void in
+                print("Error retrieving info: \(error)")
+                
+                completion(tweet: nil, error: error)
+                self.loginCompletion!(user: nil, error: error)
+        })
+        
+    }
+    
     func loginWithCompletion(completion: (user: User?, error: NSError?) -> ()) {
         loginCompletion = completion
         
@@ -73,79 +89,102 @@ class TwitterClient: BDBOAuth1SessionManager {
 
     }
     
-    func retweet(id: Int) {
-        POST("1.1/statuses/retweet/\(id).json", parameters: nil, success: { (operation, response) -> Void in
-            print("succesfully retweeted")
-            
-            }, failure: { (operation, error) -> Void in
+    func newTweetWithParams(params: NSDictionary!, completion: (tweet: Tweet?, error: NSError?) -> ()) {
+        POST("1.1/statuses/update.json", parameters: params, success: { (operation: NSURLSessionDataTask!, response: AnyObject?) -> Void in
+            print("tweeted successfully")
+            let tweet = Tweet(dictionary: response as! NSDictionary)
+            completion(tweet: tweet, error: nil)
+            }, failure: { (operation: NSURLSessionDataTask?, error: NSError!) -> Void in
+                print("did not tweet")
+                completion(tweet: nil, error: error)
+        })
+    }
+    
+    func retweetWithParams(id: String, params: NSDictionary?, completion:(error: NSError?) -> ()) {
+        print(id)
+        POST("1.1/statuses/retweet/\(id).json", parameters: params, success: { (operation: NSURLSessionDataTask!, response: AnyObject?) -> Void in
+            print("successfully retweeted")
+            completion(error: nil)
+            }, failure: { (operation: NSURLSessionDataTask?, error: NSError!) -> Void in
                 print("error retweeting")
+                completion(error: error)
         })
     }
     
-    func favoriteTweet(id: Int) {
-        POST("1.1/favorites/create.json", parameters: ["id": id], success: { (operation, response) -> Void in
-            print("succesfully favorited")
-            
-            }, failure: { (operation, error) -> Void in
+    func unretweetWithParams(id: String, tweet: Tweet?, params: NSDictionary?, completion:(error: NSError?) -> ()) {
+        
+        var originalTweetId = ""
+        var retweetId = ""
+        if tweet!.retweeted == false {
+            print("cannot untweet if have not retweeted")
+        } else if tweet!.retweeted_status == nil{
+            originalTweetId = tweet!.tweetId!
+        } else {
+            originalTweetId = tweet!.retweeted_status!["id_str"] as! String
+        }
+        
+        GET("1.1/statuses/show/\(originalTweetId).json?include_my_retweet=1", parameters: params, success: { (operation: NSURLSessionDataTask!,response: AnyObject?) -> Void in
+            let fullTweet = response as! NSDictionary
+            let retweet = fullTweet["current_user_retweet"]!
+            retweetId = retweet["id_str"] as! String
+            print("got full tweet")
+            }, failure: { (operation: NSURLSessionDataTask?, error: NSError!) -> Void in
+                print("error getting full tweet")
+        })
+        
+        
+        POST("1.1/statuses/unretweet/\(id).json", parameters: params, success: { (operation: NSURLSessionDataTask!, response: AnyObject?) -> Void in
+            print("successfully unretweeted")
+            completion(error: nil)
+            }, failure: { (operation: NSURLSessionDataTask?, error: NSError!) -> Void in
+                print("error unretweeting")
+                completion(error: error)
+        })
+    }
+    
+    
+    func favoriteWithParams(id: String, params: NSDictionary?, completion:(error: NSError?) -> ()) {
+        
+        POST("1.1/favorites/create.json?id=\(id)", parameters: params, success: { (operation: NSURLSessionDataTask!, response: AnyObject?) -> Void in
+            print("successfully favorited")
+            completion(error: nil)
+            }, failure: { (operation: NSURLSessionDataTask?, error: NSError!) -> Void in
                 print("error favoriting")
+                completion(error: error)
         })
     }
     
-    func unFavoriteTweet(id: Int) {
-        POST("1.1/favorites/destroy.json", parameters: ["id": id], success: { (operation, response) -> Void in
-            print("succesfully unfavorited")
-            
-            }, failure: { (operation, error) -> Void in
+    func unfavoriteWithParams(id: String, params: NSDictionary?, completion:(error: NSError?) -> ()) {
+        
+        POST("1.1/favorites/destroy.json?id=\(id)", parameters: params, success: { (operation: NSURLSessionDataTask!, response: AnyObject?) -> Void in
+            print("successfully unfavorited")
+            completion(error: nil)
+            }, failure: { (operation: NSURLSessionDataTask?, error: NSError!) -> Void in
                 print("error unfavoriting")
+                completion(error: error)
         })
     }
     
-    
-    func tweet(status: String) {
-        POST("1.1/statuses/update.json", parameters: ["status": status], success: { (operation, response) -> Void in
-            print("succesfully tweeted")
-            
-            }, failure: { (operation, error) -> Void in
-                print("error tweeting")
+    func tweet(tweetText: String) {
+        let escapedText = (tweetText.stringByAddingPercentEscapesUsingEncoding(NSUTF8StringEncoding))!
+        POST("1.1/statuses/update.json?status=\(escapedText)", parameters: nil,
+            success: { (operation: NSURLSessionDataTask, response: AnyObject?) -> Void in
+                print("You tweeted!!")
+            }, failure: { (operation: NSURLSessionDataTask?, error: NSError) -> Void in
+                print("Reply error:\(error)")
         })
+        
     }
     
-    
-    func untweet(id: Int) {
-        POST("1.1/statuses/unretweet/\(id).json", parameters: nil,  success: { (operation, response) -> Void in
-            print("succesfully untweeted")
-            
-            }, failure: { (operation, error) -> Void in
-                print("error untweeting")
+    func reply(tweetId: String, tweetText: String) {
+        let escapedText = (tweetText.stringByAddingPercentEscapesUsingEncoding(NSUTF8StringEncoding))!
+        print("1.1/statuses/update.json?status=\(escapedText)&in_reply_to_status_id=\(tweetId)")
+        POST("1.1/statuses/update.json?status=\(escapedText)&in_reply_to_status_id=\(tweetId)", parameters: nil,
+            success: { (operation: NSURLSessionDataTask, response: AnyObject?) -> Void in
+                print("replied")
+            }, failure: { (operation: NSURLSessionDataTask?, error: NSError) -> Void in
+                print("Reply error:\(error)")
         })
+        
     }
-    
-    func getTweet(id: Int) -> Tweet {
-        
-        var tweet: Tweet!
-        
-        GET("1.1/statuses/show.json", parameters: ["id", id], progress: { (progress) -> Void in
-            print("getting tweet")
-            }, success: { (session, object) -> Void in
-                tweet = object as! Tweet
-            }) { (dataTask, error) -> Void in
-                
-        }
-        return tweet
-    }
-    
-    func getUser(id: Int) -> Tweet {
-        
-        var tweet: Tweet!
-        
-        GET("1.1/statuses/show.json", parameters: ["id", id], progress: { (progress) -> Void in
-            print("getting tweet")
-            }, success: { (session, object) -> Void in
-                tweet = object as! Tweet
-            }) { (dataTask, error) -> Void in
-                
-        }
-        return tweet
-    }
-
 }
